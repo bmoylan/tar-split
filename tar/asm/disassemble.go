@@ -3,8 +3,8 @@ package asm
 import (
 	"io"
 
-	"github.com/vbatts/tar-split/archive/tar"
-	"github.com/vbatts/tar-split/tar/storage"
+	"github.com/bmoylan/tar-split/archive/tar"
+	"github.com/bmoylan/tar-split/tar/storage"
 )
 
 // NewInputTarStream wraps the Reader stream of a tar archive and provides a
