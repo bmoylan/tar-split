@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"hash/crc64"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -108,7 +107,7 @@ func TestTarStreamMangledGetterPutter(t *testing.T) {
 
 	for _, e := range entriesMangled {
 		if e.Entry.Type == storage.FileType {
-			rdr, err := fgp.Get(e.Entry.GetName())
+			rdr, err := fgp.Get(&e.Entry)
 			if err != nil {
 				t.Error(err)
 			}
@@ -117,7 +116,7 @@ func TestTarStreamMangledGetterPutter(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			rdr.Close()
+			_ = rdr.Close()
 
 			csum := c.Sum(nil)
 			if bytes.Equal(csum, e.Entry.Payload) {
@@ -144,18 +143,17 @@ var testCases = []struct {
 }
 
 func TestTarStream(t *testing.T) {
-
 	for _, tc := range testCases {
 		fh, err := os.Open(tc.path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer fh.Close()
+		defer func() { _ = fh.Close() }()
 		gzRdr, err := gzip.NewReader(fh)
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer gzRdr.Close()
+		defer func() { _ = gzRdr.Close() }()
 
 		// Setup where we'll store the metadata
 		w := bytes.NewBuffer([]byte{})
@@ -214,12 +212,12 @@ func BenchmarkAsm(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				defer fh.Close()
+				defer func() { _ = fh.Close() }()
 				gzRdr, err := gzip.NewReader(fh)
 				if err != nil {
 					b.Fatal(err)
 				}
-				defer gzRdr.Close()
+				defer func() { _ = gzRdr.Close() }()
 
 				// Setup where we'll store the metadata
 				w := bytes.NewBuffer([]byte{})
@@ -232,7 +230,7 @@ func BenchmarkAsm(b *testing.B) {
 					b.Fatal(err)
 				}
 				// read it all to the bit bucket
-				i1, err := io.Copy(ioutil.Discard, tarStream)
+				i1, err := io.Copy(io.Discard, tarStream)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -243,7 +241,7 @@ func BenchmarkAsm(b *testing.B) {
 
 				rc := NewOutputTarStream(fgp, sup)
 
-				i2, err := io.Copy(ioutil.Discard, rc)
+				i2, err := io.Copy(io.Discard, rc)
 				if err != nil {
 					b.Fatal(err)
 				}

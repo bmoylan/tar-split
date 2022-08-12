@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -22,8 +21,8 @@ func TestLargeJunkPadding(t *testing.T) {
 		// Empty archive.
 		tw := tar.NewWriter(pW)
 		if err := tw.Close(); err != nil {
-			pW.CloseWithError(err)
-			t.Fatal(err)
+			_ = pW.CloseWithError(err)
+			t.Error(err)
 			return
 		}
 
@@ -34,35 +33,35 @@ func TestLargeJunkPadding(t *testing.T) {
 		)
 		devZero, err := os.Open("/dev/zero")
 		if err != nil {
-			pW.CloseWithError(err)
-			t.Fatal(err)
+			_ = pW.CloseWithError(err)
+			t.Error(err)
 			return
 		}
-		defer devZero.Close()
+		defer func() { _ = devZero.Close() }()
 		for i := 0; i < junkChunkNum; i++ {
 			if i%32 == 0 {
-				fmt.Fprintf(os.Stderr, "[TestLargeJunkPadding] junk chunk #%d/#%d\n", i, junkChunkNum)
+				_, _ = fmt.Fprintf(os.Stderr, "[TestLargeJunkPadding] junk chunk #%d/#%d\n", i, junkChunkNum)
 			}
 			if _, err := io.CopyN(pW, devZero, junkChunkSize); err != nil {
-				pW.CloseWithError(err)
-				t.Fatal(err)
+				_ = pW.CloseWithError(err)
+				t.Error(err)
 				return
 			}
 		}
 
-		fmt.Fprintln(os.Stderr, "[TestLargeJunkPadding] junk chunk finished")
-		pW.Close()
+		_, _ = fmt.Fprintln(os.Stderr, "[TestLargeJunkPadding] junk chunk finished")
+		_ = pW.Close()
 	}()
 
 	// Disassemble our junk file.
-	nilPacker := storage.NewJSONPacker(ioutil.Discard)
+	nilPacker := storage.NewJSONPacker(io.Discard)
 	rdr, err := NewInputTarStream(pR, nilPacker, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Copy the entire rdr.
-	_, err = io.Copy(ioutil.Discard, rdr)
+	_, err = io.Copy(io.Discard, rdr)
 	if err != nil {
 		t.Fatal(err)
 	}

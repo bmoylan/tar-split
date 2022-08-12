@@ -3,7 +3,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"strings"
 	"testing"
 )
@@ -27,11 +27,11 @@ func TestGetter(t *testing.T) {
 	}
 	for n, b := range files {
 		for body := range b {
-			r, err := fgp.Get(n)
+			r, err := fgp.Get(&Entry{Name: n})
 			if err != nil {
 				t.Error(err)
 			}
-			buf, err := ioutil.ReadAll(r)
+			buf, err := io.ReadAll(r)
 			if err != nil {
 				t.Error(err)
 			}
@@ -42,24 +42,71 @@ func TestGetter(t *testing.T) {
 	}
 }
 
-func TestPutter(t *testing.T) {
-	fp := NewDiscardFilePutter()
-	// map[filename]map[body]crc64sum
-	files := map[string]map[string][]byte{
-		"file1.txt": {"foo": []byte{60, 60, 48, 48, 0, 0, 0, 0}},
-		"file2.txt": {"bar": []byte{45, 196, 22, 240, 0, 0, 0, 0}},
-		"file3.txt": {"baz": []byte{32, 68, 22, 240, 0, 0, 0, 0}},
-		"file4.txt": {"bif": []byte{48, 9, 150, 240, 0, 0, 0, 0}},
+func TestChecksumGetPutter(t *testing.T) {
+	files := []struct {
+		Entry
+		Body string
+	}{
+		{
+			Entry: Entry{
+				Type:    FileType,
+				Name:    "file1.txt",
+				Payload: []byte{60, 60, 48, 48, 0, 0, 0, 0},
+			},
+			Body: "foo",
+		},
+		{
+			Entry: Entry{
+				Type:    FileType,
+				Name:    "file2.txt",
+				Payload: []byte{45, 196, 22, 240, 0, 0, 0, 0},
+			},
+			Body: "bar",
+		},
+		{
+			Entry: Entry{
+				Type:    FileType,
+				Name:    "file3.txt",
+				Payload: []byte{32, 68, 22, 240, 0, 0, 0, 0},
+			},
+			Body: "baz",
+		},
+		{
+			Entry: Entry{
+				Type:    FileType,
+				Name:    "file4.txt",
+				Payload: []byte{48, 9, 150, 240, 0, 0, 0, 0},
+			},
+			Body: "bif",
+		},
 	}
-	for n, b := range files {
-		for body, sum := range b {
-			_, csum, err := fp.Put(n, bytes.NewBufferString(body))
-			if err != nil {
-				t.Error(err)
-			}
-			if !bytes.Equal(csum, sum) {
-				t.Errorf("checksum on %q: expected %v; got %v", n, sum, csum)
-			}
+
+	fp := NewChecksumFileGetter(t.TempDir())
+	for _, file := range files {
+		_, csum, err := fp.Put(file.Name, bytes.NewBufferString(file.Body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(csum, file.Payload) {
+			t.Errorf("checksum on %q: expected %x; got %x", file.Name, file.Payload, csum)
+		}
+	}
+
+	for _, file := range files {
+		r, err := fp.Get(&file.Entry)
+		if err != nil {
+			_ = r.Close()
+			t.Fatal(err)
+		}
+		out, err := io.ReadAll(r)
+		if err != nil {
+			_ = r.Close()
+			t.Fatal(err)
+		}
+		_ = r.Close()
+
+		if string(out) != file.Body {
+			t.Errorf("body on %q: expected %s; got %s", file.Name, file.Payload, out)
 		}
 	}
 }

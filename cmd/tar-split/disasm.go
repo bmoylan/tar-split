@@ -11,6 +11,7 @@ import (
 	"github.com/vbatts/tar-split/tar/storage"
 )
 
+// CommandDisasm provides the disasm command.
 func CommandDisasm(c *cli.Context) {
 	if len(c.Args()) != 1 {
 		logrus.Fatalf("please specify tar to be disabled <NAME|->")

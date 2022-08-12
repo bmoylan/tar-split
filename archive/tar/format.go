@@ -4,7 +4,9 @@
 
 package tar
 
-import "strings"
+import (
+	"strings"
+)
 
 // Format represents the tar archive format.
 //

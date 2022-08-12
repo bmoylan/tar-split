@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"hash"
+	"hash/crc64"
 	"io"
 	"sync"
 
@@ -25,11 +26,7 @@ func NewOutputTarStream(fg storage.FileGetter, up storage.Unpacker) io.ReadClose
 	pr, pw := io.Pipe()
 	go func() {
 		err := WriteOutputTarStream(fg, up, pw)
-		if err != nil {
-			pw.CloseWithError(err)
-		} else {
-			pw.Close()
-		}
+		_ = pw.CloseWithError(err)
 	}()
 	return pr
 }
@@ -41,6 +38,7 @@ func WriteOutputTarStream(fg storage.FileGetter, up storage.Unpacker, w io.Write
 		return nil
 	}
 	var copyBuffer []byte
+	defer byteBufferPool.Put(copyBuffer)
 	var crcHash hash.Hash
 	var crcSum []byte
 	var multiWriter io.Writer
@@ -61,22 +59,21 @@ func WriteOutputTarStream(fg storage.FileGetter, up storage.Unpacker, w io.Write
 			if entry.Size == 0 {
 				continue
 			}
-			fh, err := fg.Get(entry.GetName())
+			fh, err := fg.Get(entry)
 			if err != nil {
 				return err
 			}
 			if crcHash == nil {
-				crcHash = storage.NewHash()
+				crcHash = crc64.New(storage.CRCTable)
 				crcSum = make([]byte, 8)
 				multiWriter = io.MultiWriter(w, crcHash)
 				copyBuffer = byteBufferPool.Get().([]byte)
-				defer byteBufferPool.Put(copyBuffer)
 			} else {
 				crcHash.Reset()
 			}
 
 			if _, err := copyWithBuffer(multiWriter, fh, copyBuffer); err != nil {
-				fh.Close()
+				_ = fh.Close()
 				return err
 			}
 
@@ -84,10 +81,10 @@ func WriteOutputTarStream(fg storage.FileGetter, up storage.Unpacker, w io.Write
 				// I would rather this be a comparable ErrInvalidChecksum or such,
 				// but since it's coming through the PipeReader, the context of
 				// _which_ file would be lost...
-				fh.Close()
+				_ = fh.Close()
 				return fmt.Errorf("file integrity checksum failed for %q", entry.GetName())
 			}
-			fh.Close()
+			_ = fh.Close()
 		}
 	}
 }

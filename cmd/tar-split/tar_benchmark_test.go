@@ -1,11 +1,10 @@
 package main
 
 import (
+	upTar "archive/tar"
 	"io"
 	"os"
 	"testing"
-
-	upTar "archive/tar"
 
 	ourTar "github.com/vbatts/tar-split/archive/tar"
 )
@@ -26,12 +25,12 @@ func BenchmarkUpstreamTar(b *testing.B) {
 				if err == io.EOF {
 					break
 				}
-				fh.Close()
+				safeClose(fh)
 				b.Fatal(err)
 			}
-			io.Copy(io.Discard, tr)
+			_, _ = io.Copy(io.Discard, tr)
 		}
-		fh.Close()
+		safeClose(fh)
 	}
 }
 
@@ -50,12 +49,15 @@ func BenchmarkOurTarNoAccounting(b *testing.B) {
 				if err == io.EOF {
 					break
 				}
-				fh.Close()
+				safeClose(fh)
 				b.Fatal(err)
 			}
-			io.Copy(io.Discard, tr)
+			if _, err := io.Copy(io.Discard, tr); err != nil {
+				b.Fatal(err)
+			}
+			_, _ = io.Copy(io.Discard, tr)
 		}
-		fh.Close()
+		safeClose(fh)
 	}
 }
 
@@ -76,12 +78,12 @@ func BenchmarkOurTarYesAccounting(b *testing.B) {
 				if err == io.EOF {
 					break
 				}
-				fh.Close()
+				safeClose(fh)
 				b.Fatal(err)
 			}
-			io.Copy(io.Discard, tr)
+			_, _ = io.Copy(io.Discard, tr)
 			_ = tr.RawBytes()
 		}
-		fh.Close()
+		safeClose(fh)
 	}
 }

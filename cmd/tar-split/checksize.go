@@ -15,6 +15,7 @@ import (
 	"github.com/vbatts/tar-split/tar/storage"
 )
 
+// CommandChecksize provides the checksize command.
 func CommandChecksize(c *cli.Context) {
 	if len(c.Args()) == 0 {
 		logrus.Fatalf("please specify tar archives to check ('-' will check stdin)")
@@ -24,20 +25,20 @@ func CommandChecksize(c *cli.Context) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer fh.Close()
+		defer safeClose(fh)
 		fi, err := fh.Stat()
 		if err != nil {
 			log.Fatal(err)
 		}
 		fmt.Printf("inspecting %q (size %dk)\n", fh.Name(), fi.Size()/1024)
 
-		packFh, err := ioutil.TempFile("", "packed.")
+		packFh, err := os.CreateTemp("", "packed.")
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer packFh.Close()
+		defer safeClose(packFh)
 		if !c.Bool("work") {
-			defer os.Remove(packFh.Name())
+			defer func() { _ = os.Remove(packFh.Name()) }()
 		} else {
 			fmt.Printf(" -- working file preserved: %s\n", packFh.Name())
 		}
@@ -80,9 +81,9 @@ func CommandChecksize(c *cli.Context) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer gzPackFh.Close()
+		defer safeClose(gzPackFh)
 		if !c.Bool("work") {
-			defer os.Remove(gzPackFh.Name())
+			defer func() { _ = os.Remove(gzPackFh.Name()) }()
 		}
 
 		gzWrtr := gzip.NewWriter(gzPackFh)
@@ -94,7 +95,7 @@ func CommandChecksize(c *cli.Context) {
 		if _, err := io.Copy(gzWrtr, packFh); err != nil {
 			log.Fatal(err)
 		}
-		gzWrtr.Close()
+		safeClose(gzWrtr)
 
 		if err := gzPackFh.Sync(); err != nil {
 			log.Fatal(err)

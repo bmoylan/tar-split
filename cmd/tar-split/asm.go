@@ -11,6 +11,7 @@ import (
 	"github.com/vbatts/tar-split/tar/storage"
 )
 
+// CommandAsm provides the asm command.
 func CommandAsm(c *cli.Context) {
 	if len(c.Args()) > 0 {
 		logrus.Warnf("%d additional arguments passed are ignored", len(c.Args()))
