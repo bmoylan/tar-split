@@ -3,7 +3,6 @@ package storage
 import (
 	"bytes"
 	"errors"
-	"hash/crc64"
 	"io"
 	"os"
 	"path/filepath"
@@ -59,15 +58,15 @@ func (bfgp bufferFileGetPutter) Get(name string) (io.ReadCloser, error) {
 }
 
 func (bfgp *bufferFileGetPutter) Put(name string, r io.Reader) (int64, []byte, error) {
-	crc := crc64.New(CRCTable)
+	hsh := NewHash()
 	buf := bytes.NewBuffer(nil)
-	cw := io.MultiWriter(crc, buf)
+	cw := io.MultiWriter(hsh, buf)
 	i, err := io.Copy(cw, r)
 	if err != nil {
 		return 0, nil, err
 	}
 	bfgp.files[name] = buf.Bytes()
-	return i, crc.Sum(nil), nil
+	return i, hsh.Sum(nil), nil
 }
 
 type readCloserWrapper struct {
@@ -96,10 +95,7 @@ type bitBucketFilePutter struct {
 }
 
 func (bbfp *bitBucketFilePutter) Put(name string, r io.Reader) (int64, []byte, error) {
-	c := crc64.New(CRCTable)
-	i, err := io.CopyBuffer(c, r, bbfp.buffer[:])
-	return i, c.Sum(nil), err
+	hsh := NewHash()
+	i, err := io.CopyBuffer(hsh, r, bbfp.buffer[:])
+	return i, hsh.Sum(nil), err
 }
-
-// CRCTable is the default table used for crc64 sum calculations
-var CRCTable = crc64.MakeTable(crc64.ISO)

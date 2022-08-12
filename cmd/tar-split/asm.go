@@ -33,13 +33,13 @@ func CommandAsm(c *cli.Context) {
 		if err != nil {
 			logrus.Fatal(err)
 		}
-		defer fh.Close()
+		defer safeClose(fh)
 		outputStream = fh
 	}
 
 	if c.Bool("compress") {
 		zipper := gzip.NewWriter(outputStream)
-		defer zipper.Close()
+		defer safeClose(zipper)
 		outputStream = zipper
 	}
 
@@ -48,23 +48,29 @@ func CommandAsm(c *cli.Context) {
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	defer mf.Close()
+	defer safeClose(mf)
 	mfz, err := gzip.NewReader(mf)
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	defer mfz.Close()
+	defer safeClose(mfz)
 
 	metaUnpacker := storage.NewJSONUnpacker(mfz)
 	// XXX maybe get the absolute path here
 	fileGetter := storage.NewPathFileGetter(c.String("path"))
 
 	ots := asm.NewOutputTarStream(fileGetter, metaUnpacker)
-	defer ots.Close()
+	defer safeClose(ots)
 	i, err := io.Copy(outputStream, ots)
 	if err != nil {
 		logrus.Fatal(err)
 	}
 
 	logrus.Infof("created %s from %s and %s (wrote %d bytes)", c.String("output"), c.String("path"), c.String("input"), i)
+}
+
+func safeClose(closer io.Closer) {
+	if err := closer.Close(); err != nil {
+		logrus.Error(err)
+	}
 }

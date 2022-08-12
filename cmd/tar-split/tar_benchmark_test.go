@@ -2,7 +2,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -14,6 +13,7 @@ import (
 var testfile = "../../archive/tar/testdata/sparse-formats.tar"
 
 func BenchmarkUpstreamTar(b *testing.B) {
+	b.ReportAllocs()
 	for n := 0; n < b.N; n++ {
 		fh, err := os.Open(testfile)
 		if err != nil {
@@ -29,13 +29,14 @@ func BenchmarkUpstreamTar(b *testing.B) {
 				fh.Close()
 				b.Fatal(err)
 			}
-			io.Copy(ioutil.Discard, tr)
+			io.Copy(io.Discard, tr)
 		}
 		fh.Close()
 	}
 }
 
 func BenchmarkOurTarNoAccounting(b *testing.B) {
+	b.ReportAllocs()
 	for n := 0; n < b.N; n++ {
 		fh, err := os.Open(testfile)
 		if err != nil {
@@ -52,12 +53,14 @@ func BenchmarkOurTarNoAccounting(b *testing.B) {
 				fh.Close()
 				b.Fatal(err)
 			}
-			io.Copy(ioutil.Discard, tr)
+			io.Copy(io.Discard, tr)
 		}
 		fh.Close()
 	}
 }
+
 func BenchmarkOurTarYesAccounting(b *testing.B) {
+	b.ReportAllocs()
 	for n := 0; n < b.N; n++ {
 		fh, err := os.Open(testfile)
 		if err != nil {
@@ -76,7 +79,7 @@ func BenchmarkOurTarYesAccounting(b *testing.B) {
 				fh.Close()
 				b.Fatal(err)
 			}
-			io.Copy(ioutil.Discard, tr)
+			io.Copy(io.Discard, tr)
 			_ = tr.RawBytes()
 		}
 		fh.Close()

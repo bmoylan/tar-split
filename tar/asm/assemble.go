@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"hash"
-	"hash/crc64"
 	"io"
 	"sync"
 
@@ -67,7 +66,7 @@ func WriteOutputTarStream(fg storage.FileGetter, up storage.Unpacker, w io.Write
 				return err
 			}
 			if crcHash == nil {
-				crcHash = crc64.New(storage.CRCTable)
+				crcHash = storage.NewHash()
 				crcSum = make([]byte, 8)
 				multiWriter = io.MultiWriter(w, crcHash)
 				copyBuffer = byteBufferPool.Get().([]byte)

@@ -13,7 +13,7 @@ import (
 // In the middle it will pack the segments and file metadata to storage.Packer
 // `p`.
 //
-// The the storage.FilePutter is where payload of files in the stream are
+// The storage.FilePutter is where payload of files in the stream are
 // stashed. If this stashing is not needed, you can provide a nil
 // storage.FilePutter. Since the checksumming is still needed, then a default
 // of NewDiscardFilePutter will be used internally
@@ -43,112 +43,109 @@ func NewInputTarStream(r io.Reader, p storage.Packer, fp storage.FilePutter) (io
 	}
 
 	go func() {
-		tr := tar.NewReader(outputRdr)
-		tr.RawAccounting = true
-		for {
-			hdr, err := tr.Next()
-			if err != nil {
-				if err != io.EOF {
-					pW.CloseWithError(err)
-					return
-				}
-				// even when an EOF is reached, there is often 1024 null bytes on
-				// the end of an archive. Collect them too.
-				if b := tr.RawBytes(); len(b) > 0 {
-					_, err := p.AddEntry(storage.Entry{
-						Type:    storage.SegmentType,
-						Payload: b,
-					})
-					if err != nil {
-						pW.CloseWithError(err)
-						return
-					}
-				}
-				break // not return. We need the end of the reader.
-			}
-			if hdr == nil {
-				break // not return. We need the end of the reader.
-			}
+		err := readTarInputStream(outputRdr, p, fp)
+		_ = pW.CloseWithError(err)
+	}()
 
+	return pR, nil
+}
+
+func readTarInputStream(outputRdr io.Reader, p storage.Packer, fp storage.FilePutter) error {
+	tr := tar.NewReader(outputRdr)
+	tr.RawAccounting = true
+	for {
+		hdr, err := tr.Next()
+		if err != nil {
+			if err != io.EOF {
+				return err
+			}
+			// even when an EOF is reached, there is often 1024 null bytes on
+			// the end of an archive. Collect them too.
 			if b := tr.RawBytes(); len(b) > 0 {
 				_, err := p.AddEntry(storage.Entry{
 					Type:    storage.SegmentType,
 					Payload: b,
 				})
 				if err != nil {
-					pW.CloseWithError(err)
-					return
+					return err
 				}
 			}
-
-			var csum []byte
-			if hdr.Size > 0 {
-				var err error
-				_, csum, err = fp.Put(hdr.Name, tr)
-				if err != nil {
-					pW.CloseWithError(err)
-					return
-				}
-			}
-
-			entry := storage.Entry{
-				Type:    storage.FileType,
-				Size:    hdr.Size,
-				Payload: csum,
-			}
-			// For proper marshalling of non-utf8 characters
-			entry.SetName(hdr.Name)
-
-			// File entries added, regardless of size
-			_, err = p.AddEntry(entry)
-			if err != nil {
-				pW.CloseWithError(err)
-				return
-			}
-
-			if b := tr.RawBytes(); len(b) > 0 {
-				_, err = p.AddEntry(storage.Entry{
-					Type:    storage.SegmentType,
-					Payload: b,
-				})
-				if err != nil {
-					pW.CloseWithError(err)
-					return
-				}
-			}
+			break // not return. We need the end of the reader.
+		}
+		if hdr == nil {
+			break // not return. We need the end of the reader.
 		}
 
-		// It is allowable, and not uncommon that there is further padding on
-		// the end of an archive, apart from the expected 1024 null bytes. We
-		// do this in chunks rather than in one go to avoid cases where a
-		// maliciously crafted tar file tries to trick us into reading many GBs
-		// into memory.
-		const paddingChunkSize = 1024 * 1024
-		var paddingChunk [paddingChunkSize]byte
-		for {
-			var isEOF bool
-			n, err := outputRdr.Read(paddingChunk[:])
-			if err != nil {
-				if err != io.EOF {
-					pW.CloseWithError(err)
-					return
-				}
-				isEOF = true
-			}
-			_, err = p.AddEntry(storage.Entry{
+		if b := tr.RawBytes(); len(b) > 0 {
+			_, err := p.AddEntry(storage.Entry{
 				Type:    storage.SegmentType,
-				Payload: paddingChunk[:n],
+				Payload: b,
 			})
 			if err != nil {
-				pW.CloseWithError(err)
-				return
-			}
-			if isEOF {
-				break
+				return err
 			}
 		}
-		pW.Close()
-	}()
 
-	return pR, nil
+		var csum []byte
+		if hdr.Size > 0 {
+			var err error
+			_, csum, err = fp.Put(hdr.Name, tr)
+			if err != nil {
+				return err
+			}
+		}
+
+		entry := storage.Entry{
+			Type:    storage.FileType,
+			Size:    hdr.Size,
+			Payload: csum,
+		}
+		// For proper marshalling of non-utf8 characters
+		entry.SetName(hdr.Name)
+
+		// File entries added, regardless of size
+		_, err = p.AddEntry(entry)
+		if err != nil {
+			return err
+		}
+
+		if b := tr.RawBytes(); len(b) > 0 {
+			_, err = p.AddEntry(storage.Entry{
+				Type:    storage.SegmentType,
+				Payload: b,
+			})
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// It is allowable, and not uncommon that there is further padding on
+	// the end of an archive, apart from the expected 1024 null bytes. We
+	// do this in chunks rather than in one go to avoid cases where a
+	// maliciously crafted tar file tries to trick us into reading many GBs
+	// into memory.
+	const paddingChunkSize = 1024 * 1024
+	var paddingChunk [paddingChunkSize]byte
+	for {
+		var isEOF bool
+		n, err := outputRdr.Read(paddingChunk[:])
+		if err != nil {
+			if err != io.EOF {
+				return err
+			}
+			isEOF = true
+		}
+		_, err = p.AddEntry(storage.Entry{
+			Type:    storage.SegmentType,
+			Payload: paddingChunk[:n],
+		})
+		if err != nil {
+			return err
+		}
+		if isEOF {
+			break
+		}
+	}
+	return nil
 }
