@@ -38,14 +38,15 @@ func NewInputTarStream(r io.Reader, p storage.Packer, fp storage.FilePutter) (io
 	outputRdr := io.TeeReader(r, pW)
 
 	go func() {
-		err := ReadTarInputStream(outputRdr, p, fp)
+		err := readTarInputStream(outputRdr, p, fp)
 		_ = pW.CloseWithError(err)
 	}()
 
 	return pR, nil
 }
 
-func ReadTarInputStream(outputRdr io.Reader, p storage.Packer, fp storage.FilePutter) error {
+// readTarInputStream processes a tar reader, passing entries to the Packer and FilePutter.
+func readTarInputStream(outputRdr io.Reader, p storage.Packer, fp storage.FilePutter) error {
 	// we need a putter that will generate the crc64 sums of file payloads
 	if fp == nil {
 		fp = storage.NewDiscardFilePutter()
