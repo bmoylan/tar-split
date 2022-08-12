@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -50,7 +51,7 @@ type bufferFileGetPutter struct {
 	files map[string][]byte
 }
 
-func (bfgp bufferFileGetPutter) Get(entry *Entry) (io.ReadCloser, error) {
+func (bfgp *bufferFileGetPutter) Get(entry *Entry) (io.ReadCloser, error) {
 	name := entry.GetName()
 	if _, ok := bfgp.files[name]; !ok {
 		return nil, errors.New("no such file")
@@ -94,7 +95,18 @@ func (cfg checksumFileGetPutter) Get(entry *Entry) (io.ReadCloser, error) {
 	if entry.Type == SegmentType {
 		return os.Open(filepath.Join(cfg.root, entry.GetName()))
 	}
-	return os.Open(filepath.Join(cfg.root, hex.EncodeToString(entry.Payload)))
+	file, err := os.Open(filepath.Join(cfg.root, hex.EncodeToString(entry.Payload)))
+	if err != nil {
+		return nil, err
+	}
+	stat, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if entry.Size != stat.Size() {
+		return nil, fmt.Errorf("checksum-addressed file has size %d but entry expects %d", stat.Size(), entry.Size)
+	}
+	return file, nil
 }
 
 func (cfg checksumFileGetPutter) Put(_ string, r io.Reader) (int64, []byte, error) {
