@@ -3,9 +3,9 @@ package main
 import (
 	"os"
 
+	"github.com/bmoylan/tar-split/version"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
-	"github.com/vbatts/tar-split/version"
 )
 
 func main() {

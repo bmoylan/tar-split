@@ -8,7 +8,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/vbatts/tar-split/tar/storage"
+	"github.com/bmoylan/tar-split/tar/storage"
 )
 
 // NewOutputTarStream returns an io.ReadCloser that is an assembled tar archive

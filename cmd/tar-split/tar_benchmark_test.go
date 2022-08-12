@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	ourTar "github.com/vbatts/tar-split/archive/tar"
+	ourTar "github.com/bmoylan/tar-split/archive/tar"
 )
 
 var testfile = "../../archive/tar/testdata/sparse-formats.tar"
