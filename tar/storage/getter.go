@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"errors"
-	"hash/crc64"
 	"io"
 	"os"
 	"path/filepath"
@@ -61,15 +60,15 @@ func (bfgp bufferFileGetPutter) Get(entry *Entry) (io.ReadCloser, error) {
 }
 
 func (bfgp *bufferFileGetPutter) Put(name string, r io.Reader) (int64, []byte, error) {
-	crc := crc64.New(CRCTable)
+	hsh := NewHash()
 	buf := bytes.NewBuffer(nil)
-	cw := io.MultiWriter(crc, buf)
+	cw := io.MultiWriter(hsh, buf)
 	i, err := io.Copy(cw, r)
 	if err != nil {
 		return 0, nil, err
 	}
 	bfgp.files[name] = buf.Bytes()
-	return i, crc.Sum(nil), nil
+	return i, hsh.Sum(nil), nil
 }
 
 // NewBufferFileGetPutter is a simple in-memory FileGetPutter
@@ -132,21 +131,18 @@ type bitBucketFilePutter struct {
 }
 
 func (bbfp *bitBucketFilePutter) Put(name string, r io.Reader) (int64, []byte, error) {
-	crc := crc64.New(CRCTable)
-	i, err := io.CopyBuffer(crc, r, bbfp.buffer[:])
-	return i, crc.Sum(nil), err
+	hsh := NewHash()
+	i, err := io.CopyBuffer(hsh, r, bbfp.buffer[:])
+	return i, hsh.Sum(nil), err
 }
 
-// CRCTable is the default table used for crc64 sum calculations
-var CRCTable = crc64.MakeTable(crc64.ISO)
-
 func copyWithChecksum(w io.WriteCloser, r io.Reader) (int64, []byte, error) {
-	crc := crc64.New(CRCTable)
-	cw := io.MultiWriter(crc, w)
+	hsh := NewHash()
+	cw := io.MultiWriter(hsh, w)
 	defer func() { _ = w.Close() }()
 	i, err := io.Copy(cw, r)
 	if err != nil {
 		return 0, nil, err
 	}
-	return i, crc.Sum(nil), nil
+	return i, hsh.Sum(nil), nil
 }

@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"crypto/sha1"
 	"fmt"
-	"hash/crc64"
 	"io"
 	"os"
 	"testing"
@@ -111,7 +110,7 @@ func TestTarStreamMangledGetterPutter(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			c := crc64.New(storage.CRCTable)
+			c := storage.NewHash()
 			i, err := io.Copy(c, rdr)
 			if err != nil {
 				t.Fatal(err)
