@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/vbatts/tar-split/tar/storage"
+	"github.com/bmoylan/tar-split/tar/storage"
 )
 
 // This test failing causes the binary to crash due to memory overcommitment.

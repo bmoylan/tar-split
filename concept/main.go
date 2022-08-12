@@ -1,3 +1,4 @@
+//go:build ignore
 // +build ignore
 
 package main
@@ -10,7 +11,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/vbatts/tar-split/archive/tar"
+	"github.com/bmoylan/tar-split/archive/tar"
 )
 
 func main() {

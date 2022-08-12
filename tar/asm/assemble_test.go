@@ -11,7 +11,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/vbatts/tar-split/tar/storage"
+	"github.com/bmoylan/tar-split/tar/storage"
 )
 
 var entries = []struct {
