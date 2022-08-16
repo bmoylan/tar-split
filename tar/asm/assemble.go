@@ -64,14 +64,14 @@ func WriteOutputTarStream(fg storage.FileGetter, up storage.Unpacker, w io.Write
 			}
 			if crcHash == nil {
 				crcHash = storage.NewHash()
-				crcSum = make([]byte, 8)
+				crcSum = make([]byte, crcHash.Size())
 				multiWriter = io.MultiWriter(w, crcHash)
 				copyBuffer = byteBufferPool.Get().([]byte)
 			} else {
 				crcHash.Reset()
 			}
 
-			if _, err := copyWithBuffer(multiWriter, fh, copyBuffer); err != nil {
+			if _, err := io.CopyBuffer(multiWriter, fh, copyBuffer); err != nil {
 				_ = fh.Close()
 				return err
 			}
@@ -92,34 +92,4 @@ var byteBufferPool = &sync.Pool{
 	New: func() interface{} {
 		return make([]byte, 32*1024)
 	},
-}
-
-// copyWithBuffer is taken from stdlib io.Copy implementation
-// https://github.com/golang/go/blob/go1.5.1/src/io/io.go#L367
-func copyWithBuffer(dst io.Writer, src io.Reader, buf []byte) (written int64, err error) {
-	for {
-		nr, er := src.Read(buf)
-		if nr > 0 {
-			nw, ew := dst.Write(buf[0:nr])
-			if nw > 0 {
-				written += int64(nw)
-			}
-			if ew != nil {
-				err = ew
-				break
-			}
-			if nr != nw {
-				err = io.ErrShortWrite
-				break
-			}
-		}
-		if er == io.EOF {
-			break
-		}
-		if er != nil {
-			err = er
-			break
-		}
-	}
-	return written, err
 }
