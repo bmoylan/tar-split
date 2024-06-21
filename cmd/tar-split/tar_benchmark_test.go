@@ -1,19 +1,18 @@
 package main
 
 import (
+	upTar "archive/tar"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 
-	upTar "archive/tar"
-
-	ourTar "github.com/vbatts/tar-split/archive/tar"
+	ourTar "github.com/bmoylan/tar-split/archive/tar"
 )
 
 var testfile = "../../archive/tar/testdata/sparse-formats.tar"
 
 func BenchmarkUpstreamTar(b *testing.B) {
+	b.ReportAllocs()
 	for n := 0; n < b.N; n++ {
 		fh, err := os.Open(testfile)
 		if err != nil {
@@ -26,16 +25,17 @@ func BenchmarkUpstreamTar(b *testing.B) {
 				if err == io.EOF {
 					break
 				}
-				fh.Close()
+				safeClose(fh)
 				b.Fatal(err)
 			}
-			io.Copy(ioutil.Discard, tr)
+			_, _ = io.Copy(io.Discard, tr)
 		}
-		fh.Close()
+		safeClose(fh)
 	}
 }
 
 func BenchmarkOurTarNoAccounting(b *testing.B) {
+	b.ReportAllocs()
 	for n := 0; n < b.N; n++ {
 		fh, err := os.Open(testfile)
 		if err != nil {
@@ -49,15 +49,20 @@ func BenchmarkOurTarNoAccounting(b *testing.B) {
 				if err == io.EOF {
 					break
 				}
-				fh.Close()
+				safeClose(fh)
 				b.Fatal(err)
 			}
-			io.Copy(ioutil.Discard, tr)
+			if _, err := io.Copy(io.Discard, tr); err != nil {
+				b.Fatal(err)
+			}
+			_, _ = io.Copy(io.Discard, tr)
 		}
-		fh.Close()
+		safeClose(fh)
 	}
 }
+
 func BenchmarkOurTarYesAccounting(b *testing.B) {
+	b.ReportAllocs()
 	for n := 0; n < b.N; n++ {
 		fh, err := os.Open(testfile)
 		if err != nil {
@@ -73,12 +78,12 @@ func BenchmarkOurTarYesAccounting(b *testing.B) {
 				if err == io.EOF {
 					break
 				}
-				fh.Close()
+				safeClose(fh)
 				b.Fatal(err)
 			}
-			io.Copy(ioutil.Discard, tr)
+			_, _ = io.Copy(io.Discard, tr)
 			_ = tr.RawBytes()
 		}
-		fh.Close()
+		safeClose(fh)
 	}
 }

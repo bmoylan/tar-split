@@ -2,19 +2,20 @@ package storage
 
 import (
 	"bytes"
+	"encoding/hex"
 	"errors"
-	"hash/crc64"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 )
 
 // FileGetter is the interface for getting a stream of a file payload,
-// addressed by name/filename. Presumably, the names will be scoped to relative
+// addressed by Entry. Presumably, the names will be scoped to relative
 // file paths.
 type FileGetter interface {
-	// Get returns a stream for the provided file path
-	Get(filename string) (output io.ReadCloser, err error)
+	// Get returns a stream for the provided Entry
+	Get(entry *Entry) (output io.ReadCloser, err error)
 }
 
 // FilePutter is the interface for storing a stream of a file payload,
@@ -42,39 +43,34 @@ type pathFileGetter struct {
 	root string
 }
 
-func (pfg pathFileGetter) Get(filename string) (io.ReadCloser, error) {
-	return os.Open(filepath.Join(pfg.root, filename))
+func (pfg pathFileGetter) Get(entry *Entry) (io.ReadCloser, error) {
+	return os.Open(filepath.Join(pfg.root, entry.GetName()))
 }
 
 type bufferFileGetPutter struct {
 	files map[string][]byte
 }
 
-func (bfgp bufferFileGetPutter) Get(name string) (io.ReadCloser, error) {
+func (bfgp *bufferFileGetPutter) Get(entry *Entry) (io.ReadCloser, error) {
+	name := entry.GetName()
 	if _, ok := bfgp.files[name]; !ok {
 		return nil, errors.New("no such file")
 	}
 	b := bytes.NewBuffer(bfgp.files[name])
-	return &readCloserWrapper{b}, nil
+	return io.NopCloser(b), nil
 }
 
 func (bfgp *bufferFileGetPutter) Put(name string, r io.Reader) (int64, []byte, error) {
-	crc := crc64.New(CRCTable)
+	hsh := NewHash()
 	buf := bytes.NewBuffer(nil)
-	cw := io.MultiWriter(crc, buf)
+	cw := io.MultiWriter(hsh, buf)
 	i, err := io.Copy(cw, r)
 	if err != nil {
 		return 0, nil, err
 	}
 	bfgp.files[name] = buf.Bytes()
-	return i, crc.Sum(nil), nil
+	return i, hsh.Sum(nil), nil
 }
-
-type readCloserWrapper struct {
-	io.Reader
-}
-
-func (w *readCloserWrapper) Close() error { return nil }
 
 // NewBufferFileGetPutter is a simple in-memory FileGetPutter
 //
@@ -84,6 +80,57 @@ func NewBufferFileGetPutter() FileGetPutter {
 	return &bufferFileGetPutter{
 		files: map[string][]byte{},
 	}
+}
+
+type checksumFileGetPutter struct {
+	root string
+}
+
+// NewChecksumFileGetter returns a FileGetter that is for files stored by crc64 checksum.
+func NewChecksumFileGetter(relpath string) FileGetPutter {
+	return &checksumFileGetPutter{root: relpath}
+}
+
+func (cfg checksumFileGetPutter) Get(entry *Entry) (io.ReadCloser, error) {
+	if entry.Type == SegmentType {
+		return os.Open(filepath.Join(cfg.root, entry.GetName()))
+	}
+	file, err := os.Open(filepath.Join(cfg.root, hex.EncodeToString(entry.Payload)))
+	if err != nil {
+		return nil, err
+	}
+	stat, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if entry.Size != stat.Size() {
+		return nil, fmt.Errorf("checksum-addressed file has size %d but entry expects %d", stat.Size(), entry.Size)
+	}
+	return file, nil
+}
+
+func (cfg checksumFileGetPutter) Put(_ string, r io.Reader) (int64, []byte, error) {
+	tmp, err := os.CreateTemp(cfg.root, "checksumFileGetPutter-*")
+	if err != nil {
+		return 0, nil, err
+	}
+	i, checksum, err := copyWithChecksum(tmp, r)
+	if err != nil {
+		return 0, nil, err
+	}
+	checksumPath := filepath.Join(cfg.root, hex.EncodeToString(checksum))
+	if _, err := os.Stat(checksumPath); os.IsNotExist(err) {
+		// checksum-addressed file does not yet exist
+		if err := os.Rename(tmp.Name(), checksumPath); err != nil {
+			return 0, nil, err
+		}
+	} else {
+		// checksum-addressed file already exists
+		if err := os.Remove(tmp.Name()); err != nil {
+			return 0, nil, err
+		}
+	}
+	return i, checksum, nil
 }
 
 // NewDiscardFilePutter is a bit bucket FilePutter
@@ -96,10 +143,18 @@ type bitBucketFilePutter struct {
 }
 
 func (bbfp *bitBucketFilePutter) Put(name string, r io.Reader) (int64, []byte, error) {
-	c := crc64.New(CRCTable)
-	i, err := io.CopyBuffer(c, r, bbfp.buffer[:])
-	return i, c.Sum(nil), err
+	hsh := NewHash()
+	i, err := io.CopyBuffer(hsh, r, bbfp.buffer[:])
+	return i, hsh.Sum(nil), err
 }
 
-// CRCTable is the default table used for crc64 sum calculations
-var CRCTable = crc64.MakeTable(crc64.ISO)
+func copyWithChecksum(w io.WriteCloser, r io.Reader) (int64, []byte, error) {
+	hsh := NewHash()
+	cw := io.MultiWriter(hsh, w)
+	defer func() { _ = w.Close() }()
+	i, err := io.Copy(cw, r)
+	if err != nil {
+		return 0, nil, err
+	}
+	return i, hsh.Sum(nil), nil
+}

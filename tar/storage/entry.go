@@ -1,6 +1,8 @@
 package storage
 
-import "unicode/utf8"
+import (
+	"unicode/utf8"
+)
 
 // Entries is for sorting by Position
 type Entries []Entry

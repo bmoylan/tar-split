@@ -4,11 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"hash"
-	"hash/crc64"
 	"io"
 	"sync"
 
-	"github.com/vbatts/tar-split/tar/storage"
+	"github.com/bmoylan/tar-split/tar/storage"
 )
 
 // NewOutputTarStream returns an io.ReadCloser that is an assembled tar archive
@@ -26,11 +25,7 @@ func NewOutputTarStream(fg storage.FileGetter, up storage.Unpacker) io.ReadClose
 	pr, pw := io.Pipe()
 	go func() {
 		err := WriteOutputTarStream(fg, up, pw)
-		if err != nil {
-			pw.CloseWithError(err)
-		} else {
-			pw.Close()
-		}
+		_ = pw.CloseWithError(err)
 	}()
 	return pr
 }
@@ -42,6 +37,7 @@ func WriteOutputTarStream(fg storage.FileGetter, up storage.Unpacker, w io.Write
 		return nil
 	}
 	var copyBuffer []byte
+	defer byteBufferPool.Put(copyBuffer)
 	var crcHash hash.Hash
 	var crcSum []byte
 	var multiWriter io.Writer
@@ -62,22 +58,21 @@ func WriteOutputTarStream(fg storage.FileGetter, up storage.Unpacker, w io.Write
 			if entry.Size == 0 {
 				continue
 			}
-			fh, err := fg.Get(entry.GetName())
+			fh, err := fg.Get(entry)
 			if err != nil {
 				return err
 			}
 			if crcHash == nil {
-				crcHash = crc64.New(storage.CRCTable)
-				crcSum = make([]byte, 8)
+				crcHash = storage.NewHash()
+				crcSum = make([]byte, crcHash.Size())
 				multiWriter = io.MultiWriter(w, crcHash)
 				copyBuffer = byteBufferPool.Get().([]byte)
-				defer byteBufferPool.Put(copyBuffer)
 			} else {
 				crcHash.Reset()
 			}
 
-			if _, err := copyWithBuffer(multiWriter, fh, copyBuffer); err != nil {
-				fh.Close()
+			if _, err := io.CopyBuffer(multiWriter, fh, copyBuffer); err != nil {
+				_ = fh.Close()
 				return err
 			}
 
@@ -85,10 +80,10 @@ func WriteOutputTarStream(fg storage.FileGetter, up storage.Unpacker, w io.Write
 				// I would rather this be a comparable ErrInvalidChecksum or such,
 				// but since it's coming through the PipeReader, the context of
 				// _which_ file would be lost...
-				fh.Close()
+				_ = fh.Close()
 				return fmt.Errorf("file integrity checksum failed for %q", entry.GetName())
 			}
-			fh.Close()
+			_ = fh.Close()
 		}
 	}
 }
@@ -97,34 +92,4 @@ var byteBufferPool = &sync.Pool{
 	New: func() interface{} {
 		return make([]byte, 32*1024)
 	},
-}
-
-// copyWithBuffer is taken from stdlib io.Copy implementation
-// https://github.com/golang/go/blob/go1.5.1/src/io/io.go#L367
-func copyWithBuffer(dst io.Writer, src io.Reader, buf []byte) (written int64, err error) {
-	for {
-		nr, er := src.Read(buf)
-		if nr > 0 {
-			nw, ew := dst.Write(buf[0:nr])
-			if nw > 0 {
-				written += int64(nw)
-			}
-			if ew != nil {
-				err = ew
-				break
-			}
-			if nr != nw {
-				err = io.ErrShortWrite
-				break
-			}
-		}
-		if er == io.EOF {
-			break
-		}
-		if er != nil {
-			err = er
-			break
-		}
-	}
-	return written, err
 }

@@ -4,31 +4,29 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 )
 
 func TestDuplicateFail(t *testing.T) {
 	e := []Entry{
-		Entry{
+		{
 			Type:    FileType,
 			Name:    "./hurr.txt",
 			Payload: []byte("abcde"),
 		},
-		Entry{
+		{
 			Type:    FileType,
 			Name:    "./hurr.txt",
 			Payload: []byte("deadbeef"),
 		},
-		Entry{
+		{
 			Type:    FileType,
 			Name:    "hurr.txt", // slightly different path, same file though
 			Payload: []byte("deadbeef"),
 		},
 	}
-	buf := []byte{}
-	b := bytes.NewBuffer(buf)
+	b := bytes.NewBuffer(nil)
 
 	jp := NewJSONPacker(b)
 	if _, err := jp.AddEntry(e[0]); err != nil {
@@ -44,27 +42,26 @@ func TestDuplicateFail(t *testing.T) {
 
 func TestJSONPackerUnpacker(t *testing.T) {
 	e := []Entry{
-		Entry{
+		{
 			Type:    SegmentType,
 			Payload: []byte("how"),
 		},
-		Entry{
+		{
 			Type:    SegmentType,
 			Payload: []byte("y'all"),
 		},
-		Entry{
+		{
 			Type:    FileType,
 			Name:    "./hurr.txt",
 			Payload: []byte("deadbeef"),
 		},
-		Entry{
+		{
 			Type:    SegmentType,
 			Payload: []byte("doin"),
 		},
 	}
 
-	buf := []byte{}
-	b := bytes.NewBuffer(buf)
+	b := bytes.NewBuffer(nil)
 
 	func() {
 		jp := NewJSONPacker(b)
@@ -105,27 +102,26 @@ func TestJSONPackerUnpacker(t *testing.T) {
 // bytes uncompressed vs 138 bytes compressed.
 func TestGzip(t *testing.T) {
 	e := []Entry{
-		Entry{
+		{
 			Type:    SegmentType,
 			Payload: []byte("how"),
 		},
-		Entry{
+		{
 			Type:    SegmentType,
 			Payload: []byte("y'all"),
 		},
-		Entry{
+		{
 			Type:    FileType,
 			Name:    "./hurr.txt",
 			Payload: []byte("deadbeef"),
 		},
-		Entry{
+		{
 			Type:    SegmentType,
 			Payload: []byte("doin"),
 		},
 	}
 
-	buf := []byte{}
-	b := bytes.NewBuffer(buf)
+	b := bytes.NewBuffer(nil)
 	gzW := gzip.NewWriter(b)
 	jp := NewJSONPacker(gzW)
 	for i := range e {
@@ -133,7 +129,7 @@ func TestGzip(t *testing.T) {
 			t.Error(err)
 		}
 	}
-	gzW.Close()
+	_ = gzW.Close()
 
 	// >> packer_test.go:99: compressed: 138
 	//t.Errorf("compressed: %d", len(b.Bytes()))
@@ -165,20 +161,20 @@ func TestGzip(t *testing.T) {
 
 func BenchmarkGetPut(b *testing.B) {
 	e := []Entry{
-		Entry{
+		{
 			Type:    SegmentType,
 			Payload: []byte("how"),
 		},
-		Entry{
+		{
 			Type:    SegmentType,
 			Payload: []byte("y'all"),
 		},
-		Entry{
+		{
 			Type:    FileType,
 			Name:    "./hurr.txt",
 			Payload: []byte("deadbeef"),
 		},
-		Entry{
+		{
 			Type:    SegmentType,
 			Payload: []byte("doin"),
 		},
@@ -186,12 +182,14 @@ func BenchmarkGetPut(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			func() {
-				fh, err := ioutil.TempFile("", "tar-split.")
+				fh, err := os.CreateTemp("", "tar-split.")
 				if err != nil {
 					b.Fatal(err)
 				}
-				defer os.Remove(fh.Name())
-				defer fh.Close()
+				defer func() {
+					_ = fh.Close()
+					_ = os.Remove(fh.Name())
+				}()
 
 				jp := NewJSONPacker(fh)
 				for i := range e {
@@ -199,7 +197,7 @@ func BenchmarkGetPut(b *testing.B) {
 						b.Fatal(err)
 					}
 				}
-				fh.Sync()
+				_ = fh.Sync()
 
 				up := NewJSONUnpacker(fh)
 				for {

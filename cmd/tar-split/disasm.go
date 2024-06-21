@@ -3,15 +3,15 @@ package main
 import (
 	"compress/gzip"
 	"io"
-	"io/ioutil"
 	"os"
 
+	"github.com/bmoylan/tar-split/tar/asm"
+	"github.com/bmoylan/tar-split/tar/storage"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
-	"github.com/vbatts/tar-split/tar/asm"
-	"github.com/vbatts/tar-split/tar/storage"
 )
 
+// CommandDisasm provides the disasm command.
 func CommandDisasm(c *cli.Context) {
 	if len(c.Args()) != 1 {
 		logrus.Fatalf("please specify tar to be disabled <NAME|->")
@@ -29,7 +29,7 @@ func CommandDisasm(c *cli.Context) {
 		if err != nil {
 			logrus.Fatal(err)
 		}
-		defer fh.Close()
+		defer safeClose(fh)
 		inputStream = fh
 	}
 
@@ -38,9 +38,9 @@ func CommandDisasm(c *cli.Context) {
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	defer mf.Close()
+	defer safeClose(mf)
 	mfz := gzip.NewWriter(mf)
-	defer mfz.Close()
+	defer safeClose(mfz)
 	metaPacker := storage.NewJSONPacker(mfz)
 
 	// we're passing nil here for the file putter, because the ApplyDiff will
@@ -51,7 +51,7 @@ func CommandDisasm(c *cli.Context) {
 	}
 	var out io.Writer
 	if c.Bool("no-stdout") {
-		out = ioutil.Discard
+		out = io.Discard
 	} else {
 		out = os.Stdout
 	}

@@ -34,6 +34,3 @@ inspecting "./archive.tar" (size 200k)
  -- size of metadata uncompressed: 28k
  -- size of gzip compressed metadata: 1k
 ```
-
-
-
